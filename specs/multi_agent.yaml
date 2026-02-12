@@ -1,0 +1,59 @@
+version: "2.0"
+
+metadata:
+  author: "Sarra"
+  project: "Agentic AI Phase 2 - Testable"
+
+agents:
+
+  - id: "anomaly_detector"
+    role: "Detect anomalies in system metrics"
+    model:
+      provider: "gemini"
+      name: "gemini-2.5-flash"
+      temperature: 0.1
+      max_tokens: 1000
+    memory:
+      type: "buffer_window"
+      k: 5
+    tools:
+      - name: "metrics_api"
+        type: "api"
+        endpoint: "http://metrics-server/api/v1/nodes"
+    prompt:
+      system: |
+        Tu es un expert en monitoring système.
+        Analyse les métriques et détecte les anomalies.
+        Réponds STRICTEMENT en JSON valide.
+        Ne mets aucun markdown.
+      user: "{question}"
+
+  - id: "doc_searcher"
+    role: "Search documentation for solutions"
+    model:
+      provider: "gemini"
+      name: "gemini-2.5-flash"
+      temperature: 0.2
+      max_tokens: 1000
+    memory:
+      type: "vector_db"
+      k: 10
+    tools:
+      - name: "doc_retriever"
+        type: "retriever"
+        source: "./vectorstore/docs"
+    prompt:
+      system: |
+        Tu es un assistant expert pour la documentation.
+        Réponds **directement à la question posée**.
+        Tu fournis des réponses techniques précises.
+        Réponds STRICTEMENT en JSON valide.
+        Ne mets aucun markdown.
+      user: "{query}"
+
+guardrails:
+  input:
+    - "pas d'insultes"
+    - "pas d'injections SQL"
+  output:
+    - "format JSON uniquement"

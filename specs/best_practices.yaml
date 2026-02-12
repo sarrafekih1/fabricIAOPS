@@ -1,0 +1,13 @@
+python:
+  style: "PEP 8"
+  docstrings: "Google Style"
+  error_handling: "Use custom exception classes in exceptions.py"
+  typing: "Strict type hints required"
+
+security:
+  - "Never commit .env files"
+  - "Sanitize all SQL inputs using SQLAlchemy ORM"
+
+testing:
+  framework: "pytest"
+  coverage: "Minimum 80%"

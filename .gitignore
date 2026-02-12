@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtualenv
+venv/
+.env
+
+# Byte-compiled / cache
+*.sqlite3
+*.log
+*.bak
+
+# Vectorstore / gros fichiers locaux
+vectorstore/
+mock_metrics/

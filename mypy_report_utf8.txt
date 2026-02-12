@@ -1,0 +1,15 @@
+﻿parser\models.py:47: error: Missing type parameters for generic type "dict"  [type-arg]
+parser\models.py:49: error: Missing type parameters for generic type "dict"  [type-arg]
+parser\spec_parser.py:2: error: Library stubs not installed for "yaml"  [import-untyped]
+parser\spec_parser.py:2: note: Hint: "python3 -m pip install types-PyYAML"
+parser\spec_parser.py:2: note: (or run "mypy --install-types" to install all missing stub packages)
+parser\spec_parser.py:2: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+tests\test_parser.py:5: error: Function is missing a return type annotation  [no-untyped-def]
+tests\test_parser.py:5: note: Use "-> None" if function does not return a value
+index_docs.py:39: error: Unexpected keyword argument "google_api_key" for "GoogleGenerativeAIEmbeddings"  [call-arg]
+api\agent_endpoints.py:21: error: Function is missing a type annotation  [no-untyped-def]
+api\agent_endpoints.py:30: error: Function is missing a return type annotation  [no-untyped-def]
+api\agent_endpoints.py:49: error: Unexpected keyword argument "google_api_key" for "GoogleGenerativeAIEmbeddings"  [call-arg]
+api\agent_endpoints.py:82: error: Item "list[str | dict[Any, Any]]" of "str | list[str | dict[Any, Any]]" has no attribute "replace"  [union-attr]
+api\agent_endpoints.py:114: error: Call to untyped function "create_handler" in typed context  [no-untyped-call]
+Found 10 errors in 5 files (checked 8 source files)
