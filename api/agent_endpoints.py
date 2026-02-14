@@ -8,8 +8,12 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_chroma import Chroma
 from typing import Callable, Any
+import httpx
+import psutil
+from kubernetes import client, config
 from pydantic import SecretStr
 from parser.models import AgentSpec
+import subprocess
 
 
 load_dotenv()  # charge .env
@@ -20,8 +24,90 @@ app = FastAPI(title="Agentic AI Platform - Phase 2")
 spec = load_spec("specs/multi_agent.yaml")
 
 
+# --- Endpoint pour les métriques réelles de la machine ---
+@app.get("/local/metrics")
+async def get_local_metrics():
+    """Returns real-time CPU, RAM, and Disk metrics from the host machine."""
+    return {
+        "cpu": {
+            "usage_percent": psutil.cpu_percent(interval=None),
+            "count": psutil.cpu_count(),
+            "load_avg": psutil.getloadavg() if hasattr(psutil, "getloadavg") else "N/A"
+        },
+        "memory": {
+            "total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
+            "available_gb": round(psutil.virtual_memory().available / (1024**3), 2),
+            "usage_percent": psutil.virtual_memory().percent
+        },
+        "disk": {
+            "total_gb": round(psutil.disk_usage('/').total / (1024**3), 2),
+            "used_gb": round(psutil.disk_usage('/').used / (1024**3), 2),
+            "free_gb": round(psutil.disk_usage('/').free / (1024**3), 2),
+            "usage_percent": psutil.disk_usage('/').percent
+        }
+    }
+
+
+# --- Endpoint pour les métriques Kubernetes locales (Minikube) ---
+@app.get("/k8s/metrics")
+async def get_k8s_metrics():
+    """Fetches real node and pod metrics from the local Kubernetes cluster."""
+    try:
+        # Charge la config locale Minikube
+        config.load_kube_config()
+        
+        # API pour les Custom Objects (metrics-server)
+        api = client.CustomObjectsApi()
+        
+        # Récupérer les métriques des noeuds
+        node_metrics = api.list_cluster_custom_object(
+            group="metrics.k8s.io",
+            version="v1beta1",
+            plural="nodes"
+        )
+        
+        # Récupérer les métriques des pods
+        pod_metrics = api.list_cluster_custom_object(
+            group="metrics.k8s.io",
+            version="v1beta1",
+            plural="pods"
+        )
+        
+        # Récupérer les infos détaillées des pods (status, restarts, etc.)
+        v1 = client.CoreV1Api()
+        all_pods = v1.list_pod_for_all_namespaces()
+        
+        pods_info = []
+        for pod in all_pods.items:
+            pod_status = pod.status.phase
+            restarts = sum(cs.restart_count for cs in pod.status.container_statuses) if pod.status.container_statuses else 0
+            pods_info.append({
+                "name": pod.metadata.name,
+                "namespace": pod.metadata.namespace,
+                "status": pod_status,
+                "restarts": restarts,
+                "node": pod.spec.node_name
+            })
+        
+        return {
+            "status": "success",
+            "cluster_type": "minikube/local",
+            "nodes": node_metrics.get("items", []),
+            "pods_metrics": pod_metrics.get("items", []),
+            "pods_info": pods_info
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Erreur de connexion au cluster local : {str(e)}",
+            "hint": "Vérifiez que Minikube est démarré (minikube start)"
+        }
+
+
+
 # Créer dynamiquement un endpoint pour chaque agent
 def create_handler(agent_spec: AgentSpec) -> Callable[[str], Any]:
+
     """Creates a request handler for a specific agent specification.
 
     Args:
@@ -31,6 +117,7 @@ def create_handler(agent_spec: AgentSpec) -> Callable[[str], Any]:
         A function to handle queries for the agent.
     """
     async def handle_query(query: str) -> dict[str, Any]:
+
         """Executes the agent's prompt via LangChain and Gemini."""
         try:
             # 1️⃣ Créer LLM LangChain selon le provider
@@ -44,11 +131,10 @@ def create_handler(agent_spec: AgentSpec) -> Callable[[str], Any]:
             else:
                 raise HTTPException(status_code=400, detail="Provider non supporté")
 
-            # 2️⃣ Gérer la récupération (RAG) si nécessaire
-            context = ""
+            # ⚡ Exécution des outils (RAG ou API)
+            context_parts = []
             for tool in agent_spec.tools:
                 if tool.type == "retriever":
-                    # Charger le vectorstore
                     embeddings = GoogleGenerativeAIEmbeddings(
                         model="models/gemini-embedding-001",
                         api_key=SecretStr(GEMINI_API_KEY) if GEMINI_API_KEY else None,
@@ -57,16 +143,30 @@ def create_handler(agent_spec: AgentSpec) -> Callable[[str], Any]:
                         persist_directory="./vectorstore/chroma_db",
                         embedding_function=embeddings,
                     )
-
-                    # Chercher les documents pertinents
                     docs = vectordb.similarity_search(query, k=3)
-                    context = "\n".join([d.page_content for d in docs])
-                    break
+                    retriever_context = "\n".join([d.page_content for d in docs])
+                    context_parts.append(f"--- Documentation ({tool.name}) ---\n{retriever_context}")
 
-            # 3️⃣ Construire le prompt avec contexte
-            prompt_text = agent_spec.prompt.system
+                elif tool.type == "api" and tool.endpoint:
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            # Note: kubectl proxy permet l'accès sans auth sur localhost:8001
+                            response = await client.get(tool.endpoint, timeout=10.0)
+                            response.raise_for_status()
+                            api_data = response.text
+                            context_parts.append(f"--- Données API ({tool.name}) ---\n{api_data}")
+                    except Exception as e:
+                        context_parts.append(f"--- Erreur API ({tool.name}) ---\nImpossible de récupérer les données : {str(e)}")
+
+            context = "\n\n".join(context_parts)
+
+            # Échapper les accolades dans le prompt système pour éviter que LangChain ne les prenne pour des variables
+            # (Surtout maintenant qu'on a du JSON dans le prompt)
+            prompt_text = agent_spec.prompt.system.replace("{", "{{").replace("}", "}}")
             if context:
-                prompt_text += f"\n\nContexte récupéré :\n{context}"
+                # Échapper les accolades pour éviter les erreurs de variable LangChain si le contexte contient du JSON
+                safe_context = context.replace("{", "{{").replace("}", "}}")
+                prompt_text += f"\n\nContexte récupéré :\n{safe_context}"
 
             prompt = ChatPromptTemplate.from_template(
                 f"{prompt_text}\nUser: {{question}}"
@@ -74,29 +174,22 @@ def create_handler(agent_spec: AgentSpec) -> Callable[[str], Any]:
 
             chain = prompt | llm
 
-            # 4️⃣ Exécuter
+            # 3️⃣ Exécuter
             result = chain.invoke({"question": query})
             raw_response = result.content
 
-            # 4️⃣ Nettoyer et parser la string JSON imbriquée
+            # 4️⃣ Parser JSON
+            # Nettoyer d'éventuels backticks markdown ou texte superflu
+            clean_response = raw_response.strip()
+            if "```json" in clean_response:
+                clean_response = clean_response.split("```json")[1].split("```")[0].strip()
+            elif "```" in clean_response:
+                clean_response = clean_response.split("```")[1].split("```")[0].strip()
+            
             try:
-                # Supprimer les ```json si présents
-                if not isinstance(raw_response, str):
-                    raw_response = str(raw_response)
-                clean_response = (
-                    raw_response.replace("```json", "").replace("```", "").strip()
-                )
-
-                # Parser la première couche
                 parsed_response = json.loads(clean_response)
-
-                # Si c'est encore une string JSON imbriquée, parser à nouveau
-                if isinstance(parsed_response, str):
-                    parsed_response = json.loads(parsed_response)
-
             except json.JSONDecodeError:
-                # si ce n’est toujours pas du JSON, renvoyer la string brute
-                parsed_response = {"raw_response": raw_response}
+                parsed_response = {"raw_response": raw_response, "error": "Failed to parse JSON"}
 
             return {
                 "agent_id": agent_spec.id,
@@ -106,7 +199,6 @@ def create_handler(agent_spec: AgentSpec) -> Callable[[str], Any]:
 
         except Exception as e:
             import traceback
-
             print(f"Error in handle_query for agent {agent_spec.id}:")
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=str(e))

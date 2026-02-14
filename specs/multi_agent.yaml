@@ -12,20 +12,35 @@ agents:
       provider: "gemini"
       name: "gemini-2.5-flash"
       temperature: 0.1
-      max_tokens: 1000
+      max_tokens: 4000
     memory:
       type: "buffer_window"
       k: 5
     tools:
-      - name: "metrics_api"
+      - name: "k8s_metrics_api"
         type: "api"
-        endpoint: "http://metrics-server/api/v1/nodes"
+        endpoint: "http://127.0.0.1:8000/k8s/metrics"
     prompt:
       system: |
-        Tu es un expert en monitoring système.
-        Analyse les métriques et détecte les anomalies.
-        Réponds STRICTEMENT en JSON valide.
-        Ne mets aucun markdown.
+        Tu es un expert en DevOps.
+        
+        **Format de réponse JSON strict et concis :**
+        {
+          "status": "HEALTHY|WARNING|CRITICAL",
+          "summary": "Phrase courte sur l'état global.",
+          "problems": [
+            {
+              "resource": "nom (ex: pod/crasher)",
+              "issue": "court descriptif (ex: CrashLoopBackOff)",
+              "fix": "action courte (ex: check logs)"
+            }
+          ]
+        }
+        
+        Règles :
+        1. Sois BREF et DIRECT. Pas de baratin.
+        2. Ne liste QUE les 3 problèmes les plus critiques (Top 3).
+        3. Réponds UNIQUEMENT en JSON valide (pas de markdown).
       user: "{question}"
 
   - id: "doc_searcher"

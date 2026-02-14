@@ -1,3 +1,0 @@
-﻿index_docs.py:40: error: Argument "api_key" to "GoogleGenerativeAIEmbeddings" has incompatible type "str"; expected "SecretStr | None"  [arg-type]
-api\agent_endpoints.py:53: error: Argument "api_key" to "GoogleGenerativeAIEmbeddings" has incompatible type "str | None"; expected "SecretStr | None"  [arg-type]
-Found 2 errors in 2 files (checked 8 source files)
