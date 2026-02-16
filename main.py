@@ -7,7 +7,7 @@ import uvicorn
 if __name__ == "__main__":
     spec = load_spec("specs/multi_agent.yaml")
     best_practices = load_best_practices("specs/best_practices.yaml")
-    # Appliquer automatiquement
+    # Appliquer automatiquement : marche pas
    # enforce_best_practices(best_practices)
 
     print("Agents chargés :")

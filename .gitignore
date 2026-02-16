@@ -14,5 +14,4 @@ venv/
 *.bak
 
 # Vectorstore / gros fichiers locaux
-vectorstore/
 mock_metrics/

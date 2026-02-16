@@ -1,0 +1,9 @@
+Pour déployer un microservice avec Docker Compose, créez un fichier docker-compose.yml...
+Guide rapide Docker
+
+- docker build -t nom_image .        # construire une image Docker
+- docker run -p 8080:80 nom_image    # lancer un container
+- docker ps                          # lister les containers actifs
+- docker logs <container_id>         # afficher les logs d'un container
+- docker stop <container_id>         # arrêter un container
+- docker rm <container_id>           # supprimer un container arrêté

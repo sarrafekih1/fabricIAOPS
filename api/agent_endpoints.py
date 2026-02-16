@@ -7,7 +7,7 @@ from parser.spec_parser import load_spec
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_chroma import Chroma
-from typing import Callable, Any
+from typing import Callable, Any, Optional
 import httpx
 import psutil
 from kubernetes import client, config
@@ -116,7 +116,7 @@ def create_handler(agent_spec: AgentSpec) -> Callable[[str], Any]:
     Returns:
         A function to handle queries for the agent.
     """
-    async def handle_query(query: str) -> dict[str, Any]:
+    async def handle_query(query: str, spec_id: Optional[str] = None) -> dict[str, Any]:
 
         """Executes the agent's prompt via LangChain and Gemini."""
         try:
@@ -131,8 +131,23 @@ def create_handler(agent_spec: AgentSpec) -> Callable[[str], Any]:
             else:
                 raise HTTPException(status_code=400, detail="Provider non supporté")
 
-            # ⚡ Exécution des outils (RAG ou API)
+            # 2️⃣ Récupérer le contexte (Outils + Docs + Specs)
             context_parts = []
+            
+            # Gestion des Specs JSON (Nouveau)
+            if spec_id:
+                try:
+                    from parser.json_parser import JSONSpecParser
+                    # On suppose que les specs sont dans specs/{spec_id}.json
+                    spec_path = f"specs/{spec_id}.json"
+                    spec_json = JSONSpecParser.parse(spec_path)
+                    spec_context = JSONSpecParser.to_prompt_context(spec_json)
+                    context_parts.append(spec_context)
+                    # On ajuste la question pour inclure l'instruction d'implémentation
+                    query = f"Implement the feature defined in the attached specification ({spec_json.title}).\n{query}"
+                except Exception as e:
+                    context_parts.append(f"⚠️ Error loading spec {spec_id}: {str(e)}")
+
             for tool in agent_spec.tools:
                 if tool.type == "retriever":
                     embeddings = GoogleGenerativeAIEmbeddings(
