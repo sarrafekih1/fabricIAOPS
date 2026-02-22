@@ -1,4 +1,4 @@
-from parser.spec_parser import load_spec, load_best_practices, enforce_best_practices
+from parser.spec_parser import load_spec, load_best_practices
 from api.agent_endpoints import app
 
 
@@ -8,7 +8,7 @@ if __name__ == "__main__":
     spec = load_spec("specs/multi_agent.yaml")
     best_practices = load_best_practices("specs/best_practices.yaml")
     # Appliquer automatiquement : marche pas
-   # enforce_best_practices(best_practices)
+    # enforce_best_practices(best_practices)
 
     print("Agents chargés :")
     for agent in spec.agents:

@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
+
 
 @dataclass
 class FeatureSpec:
@@ -11,22 +12,28 @@ class FeatureSpec:
     edge_cases: List[str]
     tech_constraints: List[str]
 
+
 class JSONSpecParser:
     """Parses JSON feature specifications for the agentic workflow."""
-    
+
     @staticmethod
     def parse(file_path: str) -> FeatureSpec:
         """Reads a JSON spec file and returns a validated FeatureSpec object."""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
+
             # Simple validation of required fields
-            required_fields = ["feature_id", "title", "user_story", "acceptance_criteria"]
+            required_fields = [
+                "feature_id",
+                "title",
+                "user_story",
+                "acceptance_criteria",
+            ]
             for field in required_fields:
                 if field not in data:
                     raise ValueError(f"Missing required field in spec: {field}")
-            
+
             return FeatureSpec(
                 feature_id=data.get("feature_id", "UNKNOWN"),
                 title=data.get("title", "Untitled Feature"),

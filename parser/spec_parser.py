@@ -68,10 +68,12 @@ def load_best_practices(path: str) -> BestPracticesSpec:
         print("\n❌ Erreur Best Practices :", e)
         raise e
 
-    return spec   
+    return spec
+
+
 def enforce_best_practices(best_practices):
     import subprocess
-    
+
     # Python style
     if best_practices.python.style == "PEP 8":
         subprocess.run(["flake8", "."])
